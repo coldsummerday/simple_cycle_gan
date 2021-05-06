@@ -13,4 +13,6 @@ python3 -u  tools/testlmdbmodel.py --source_lmdb ./data/lmdbdataset/src_generate
     --load_size 32 --crop_size 32 640 \
     --print_freq 100 --save_epoch_freq 5 \
     --pretrain_ctc_model ./checkpoints/train_srcg/ocr-44000.pth \
-    --num_threads 8 --batch_size 2
+    --num_threads 8 --batch_size 1
+
+python3 tools/train.py configs/cycle_ocr_cond/cycle_ocr_cond_ctc.py

@@ -36,7 +36,7 @@ class TrainOptions(BaseOptions):
         # parser.add_argument('--lr_decay_iters', type=int, default=50, help='multiply by a gamma every lr_decay_iters iterations')
 
         parser.add_argument('--n_class', type=int, default=6129, help='the number of classes')
-        parser.add_argument('--chn_dict_path', type=str, default='./list/new_chn_list.txt',
+        parser.add_argument('--chn_dict_path', type=str, default='./list/chinese_charset.txt',
                                             help='the datalist containing img path and labels of source dataset')
         parser.add_argument('--source_list', type=str, default='./list/src_generate.txt', help='the datalist containing img path and labels of source dataset')
         parser.add_argument('--target_list', type=str, default='./list/train_1w.txt', help='the datalist containing img path and labels of target dataset')

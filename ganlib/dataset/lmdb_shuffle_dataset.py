@@ -17,8 +17,14 @@ class LMDBShuffleDataset(BaseDataset):
             opt (Option class) -- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
         BaseDataset.__init__(self, opt)
-        self.max_length = 60
+
+
         self.opt = opt
+        ctc_w_down_scale = 4
+        ctc_h_down_scale = 32
+        max_len = int(opt.crop_size[0] / ctc_h_down_scale) * int(opt.crop_size[1] / ctc_w_down_scale) - 1
+
+        self.max_length = max_len
         self.input_nc = self.opt.output_nc
         self.augment = augment
         self.shuffle = shuffle
@@ -101,7 +107,7 @@ class LMDBShuffleDataset(BaseDataset):
         params = get_params(self.opt, img.size)
         transform_list = get_transform(self.opt, params=params, grayscale=(self.input_nc == 1))
         img = transform_list[0](img)
-        width = img.size[0]
+        width = img.size[1]
         if width > 640:
             width = 640
         transform = transforms.Compose(transform_list[1:])

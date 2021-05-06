@@ -6,6 +6,68 @@ from PIL import Image
 import os
 from random import shuffle
 from torch.utils.data import Dataset, DataLoader
+from collections import OrderedDict
+
+
+
+def save_checkpoint(model, filename, num_epoch:int=0,num_iter:int=0):
+    """Save checkpoint to file.
+
+    The checkpoint will have 3 fields: ``meta``, ``state_dict`` and
+    ``optimizer``. By default ``meta`` will contain some train info.
+
+    Args:
+        model (Module): Module whose params are to be saved.
+        filename (str): Checkpoint filename.
+        optimizer (:obj:`Optimizer`, optional): Optimizer to be saved.
+        meta (dict, optional): Metadata to be saved in checkpoint.
+    """
+    os.makedirs(os.path.dirname(filename),exist_ok=True)
+
+    if hasattr(model, 'module'):
+        model = model.module
+
+    checkpoint = {
+        'num_epoch': num_epoch,
+        'num_iter':num_iter,
+        'state_dict': weights_to_cpu(model.state_dict())
+    }
+    torch.save(checkpoint, filename)
+
+def weights_to_cpu(state_dict):
+    """Copy a model state_dict to cpu.
+
+    Args:
+        state_dict (OrderedDict): Model weights on GPU.
+
+    Returns:
+        OrderedDict: Model weights on CPU.
+    """
+    state_dict_cpu = OrderedDict()
+    for key, val in state_dict.items():
+        state_dict_cpu[key] = val.cpu()
+    return state_dict_cpu
+
+
+def load_checkpoint(model,filename:str,device):
+    checkpoint = torch.load(filename, map_location=device)
+    # get state_dict from checkpoint
+    if isinstance(checkpoint, OrderedDict):
+        state_dict = checkpoint
+    elif isinstance(checkpoint, dict) and 'state_dict' in checkpoint:
+        state_dict = checkpoint['state_dict']
+    else:
+        raise RuntimeError(
+            'No state_dict found in checkpoint file {}'.format(filename))
+    # strip prefix of state_dict
+    if list(state_dict.keys())[0].startswith('module.'):
+        state_dict = {k[7:]: v for k, v in checkpoint['state_dict'].items()}
+        # load state_dict
+    if hasattr(model, 'module'):
+        model.module.load_state_dict(state_dict,strict=False)
+    else:
+        model.load_state_dict(state_dict, strict=False)
+    return checkpoint
 
 
 def tensor2im(input_image, imtype=np.uint8):
@@ -109,17 +171,17 @@ def concat_labels(label_idx, label_len):
     return targets
 
 
-def concat_dataset(s_trainset, t_trainset):
-    class catDataset(Dataset):
-        def __init__(self, s_trainset, t_trainset):
-            self.ds1 = s_trainset
-            self.ds2 = t_trainset
+class catDataset(Dataset):
+    def __init__(self, s_trainset, t_trainset):
+        super(catDataset, self).__init__()
+        self.ds1 = s_trainset
+        self.ds2 = t_trainset
 
-        def __len__(self):
-            return max(len(self.ds1), len(self.ds2))
+    def __len__(self):
+        return max(len(self.ds1), len(self.ds2))
 
-        def __getitem__(self, idx):
-            sample = {
+    def __getitem__(self, idx):
+        sample = {
                 "S": self.ds1[idx % len(self.ds1)][0],
                 "S_labels": self.ds1[idx % len(self.ds1)][1],
                 "S_label_lens": self.ds1[idx % len(self.ds1)][2],
@@ -129,7 +191,9 @@ def concat_dataset(s_trainset, t_trainset):
                 "T_label_lens": self.ds2[idx % len(self.ds2)][2],
                 "T_width": self.ds2[idx % len(self.ds2)][3]
             }
-            return sample
+        return sample
+
+def concat_dataset(s_trainset, t_trainset):
     return catDataset(s_trainset, t_trainset)
 
 def dict_data2model(model,data:dict):

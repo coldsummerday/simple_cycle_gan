@@ -3,6 +3,7 @@ import  torch.nn as nn
 
 class BaseModel(nn.Module):
     def __init__(self):
+        super(BaseModel, self).__init__()
         pass
 
     def forward(self,data:dict,return_loss:bool):

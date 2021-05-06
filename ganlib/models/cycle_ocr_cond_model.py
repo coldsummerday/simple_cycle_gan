@@ -5,7 +5,7 @@ import itertools
 from .simple_model_base import BaseModel
 from . import networks
 from ..utils import concat_labels
-from ..image_pool import ImagePool
+from ganlib.utils.image_pool import ImagePool
 class CycleOCRCondModel(BaseModel):
     """
        This class implements the CycleGAN model, for learning image-to-image translation without paired dataset.
@@ -28,20 +28,20 @@ class CycleOCRCondModel(BaseModel):
         # The naming is different from those used in the paper.
         # Code (vs. paper): G_A (G), G_B (F), D_A (D_Y), D_B (D_X)
         # concate A and B
-        self.netG_T = networks.define_G(6, opt.output_nc, opt.ngf, opt.netG, opt.norm,
+        self.netG_T = networks.define_G(6, opt.output_nc, opt.ngf, opt.netg, opt.norm,
                                         not opt.no_dropout, opt.init_type, opt.init_gain,
                                         skip_connect=opt.skip_connect)
-        self.netG_S = networks.define_G(6, opt.output_nc, opt.ngf, opt.netG, opt.norm,
+        self.netG_S = networks.define_G(6, opt.output_nc, opt.ngf, opt.netg, opt.norm,
                                         not opt.no_dropout, opt.init_type, opt.init_gain,
                                         skip_connect= opt.skip_connect)
-        self.netC_S = networks.define_OCR(opt.n_class, opt.init_type, opt.init_gain)
-        self.netC_T = networks.define_OCR(opt.n_class, opt.init_type, opt.init_gain)
+        self.netC_S = networks.define_OCR(opt.n_class,opt.crop_size ,opt.init_type, opt.init_gain)
+        self.netC_T = networks.define_OCR(opt.n_class,opt.crop_size,opt.init_type, opt.init_gain)
 
         if self.is_train:
-            self.netD_S = networks.define_D(opt.output_nc, opt.ndf, opt.netD,
-                                            opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain)
-            self.netD_T = networks.define_D(opt.input_nc, opt.ndf, opt.netD,
-                                            opt.n_layers_D, opt.norm, opt.init_type, opt.init_gain)
+            self.netD_S = networks.define_D(opt.output_nc, opt.ndf, opt.netd,
+                                            opt.n_layers_d, opt.norm, opt.init_type, opt.init_gain)
+            self.netD_T = networks.define_D(opt.input_nc, opt.ndf, opt.netd,
+                                            opt.n_layers_d, opt.norm, opt.init_type, opt.init_gain)
 
         #define_loss_func
         if self.is_train:
@@ -54,49 +54,23 @@ class CycleOCRCondModel(BaseModel):
             self.fake_S_pool = ImagePool(opt.pool_size)  # create image buffer to store previously generated images
             self.fake_T_pool = ImagePool(opt.pool_size)  # create image buffer to store previously generated images
 
-            self.ctc_train_len = 159
+            h_down_scale = self.netC_S.h_down_scale
+            w_down_scale = self.netC_S.w_down_scale
+            max_len = int(opt.crop_size[0] / h_down_scale) * int(opt.crop_size[1] / w_down_scale) - 1
+            self.ctc_train_len = max_len
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
             self.optimizer_G = torch.optim.Adam(
                 itertools.chain(self.netG_S.parameters(), self.netG_T.parameters(), self.netC_S.parameters(),
                                 self.netC_T.parameters()), lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizer_D = torch.optim.Adam(itertools.chain(self.netD_S.parameters(), self.netD_T.parameters()),
                                                 lr=opt.lr, betas=(opt.beta1, 0.999))
-            # self.optimizers.append(self.optimizer_G)
-            # self.optimizers.append(self.optimizer_D)
 
-    ##TODO:remove
-    @staticmethod
-    def modify_commandline_options(parser, is_train=True):
-        """Add new dataset-specific options, and rewrite default values for existing options.
 
-        Parameters:
-            parser          -- original option parser
-            is_train (bool) -- whether training phase or test phase. You can use this flag to add training-specific or test-specific options.
-
-        Returns:
-            the modified parser.
-
-        For CycleGAN, in addition to GAN losses, we introduce lambda_A, lambda_B, and lambda_identity for the following losses.
-        A (source domain), B (target domain).
-        Generators: G_A: A -> B; G_B: B -> A.
-        Discriminators: D_A: G_A(A) vs. B; D_B: G_B(B) vs. A.
-        Forward cycle loss:  lambda_A * ||G_B(G_A(A)) - A|| (Eqn. (2) in the paper)
-        Backward cycle loss: lambda_B * ||G_A(G_B(B)) - B|| (Eqn. (2) in the paper)
-        Identity loss (optional): lambda_identity * (||G_A(B) - B|| * lambda_B + ||G_B(A) - A|| * lambda_A) (Sec 5.2 "Photo generation from paintings" in the paper)
-        Dropout is not used in the original CycleGAN paper.
-        """
-        parser.set_defaults(no_dropout=True)  # default CycleGAN did not use dropout
-        if is_train:
-            parser.add_argument('--lambda_S', type=float, default=10.0, help='weight for cycle loss (A -> B -> A)')
-            parser.add_argument('--lambda_T', type=float, default=10.0, help='weight for cycle loss (B -> A -> B)')
-            parser.add_argument('--lambda_identity', type=float, default=0.5,
-                                help='use identity mapping. Setting lambda_identity other than 0 has an effect of scaling the weight of the identity mapping loss. For example, if the weight of the identity loss should be 10 times smaller than the weight of the reconstruction loss, please set lambda_identity = 0.1')
-
-        return parser
 
     def set_input_dict(self,data_dict:dict)->dict:
         input_S = data_dict['S']
         input_T = data_dict['T']
+        data_dict["input_S"] = input_S
         data_dict["input_S"] = input_S
         data_dict["input_T"] = input_T
         data_dict["gt_S"] = data_dict["S"]
@@ -138,8 +112,8 @@ class CycleOCRCondModel(BaseModel):
 
 
         lambda_idt = self.opt.lambda_identity
-        lambda_S = self.opt.lambda_S
-        lambda_T = self.opt.lambda_T
+        lambda_S = self.opt.lambda_s
+        lambda_T = self.opt.lambda_t
         # Identity loss
         if lambda_idt > 0:
             # G_A should be identity if real_B is fed: ||G_A(B) - B||

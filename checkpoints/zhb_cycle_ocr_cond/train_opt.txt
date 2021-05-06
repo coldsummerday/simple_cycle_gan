@@ -1,9 +1,9 @@
 ----------------- Options ---------------
-               batch_size: 2                             	[default: 10]
+               batch_size: 1                             	[default: 10]
                     beta1: 0.5                           
                   charset: ./data/chinese_charset.txt    
           checkpoints_dir: ./checkpoints                 
-            chn_dict_path: ./list/new_chn_list.txt       
+            chn_dict_path: ./list/chinese_charset.txt    
            continue_train: False                         
                 crop_size: [32, 640]                     
                  dataroot: datasets/common_front_common_corpus

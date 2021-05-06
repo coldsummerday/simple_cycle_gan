@@ -28,20 +28,20 @@ class BaseDataset(data.Dataset, ABC):
             opt (Option class)-- stores all the experiment flags; needs to be a subclass of BaseOptions
         """
         self.opt = opt
-        self.root = opt.dataroot
+        # self.root = opt.dataroot
 
-    @staticmethod
-    def modify_commandline_options(parser, is_train):
-        """Add new dataset-specific options, and rewrite default values for existing options.
-
-        Parameters:
-            parser          -- original option parser
-            is_train (bool) -- whether training phase or test phase. You can use this flag to add training-specific or test-specific options.
-
-        Returns:
-            the modified parser.
-        """
-        return parser
+    # @staticmethod
+    # def modify_commandline_options(parser, is_train):
+    #     """Add new dataset-specific options, and rewrite default values for existing options.
+    #
+    #     Parameters:
+    #         parser          -- original option parser
+    #         is_train (bool) -- whether training phase or test phase. You can use this flag to add training-specific or test-specific options.
+    #
+    #     Returns:
+    #         the modified parser.
+    #     """
+    #     return parser
 
     @abstractmethod
     def __len__(self):
@@ -73,7 +73,7 @@ def get_params(opt, size):
         else:
             new_h = opt.load_size
             new_w = opt.load_size * w // h
-    base = 4 if 'unet' not in opt.netG else int(opt.netG.split('_')[-1])
+    base = 4 if 'unet' not in opt.netg else int(opt.netg.split('_')[-1])
     new_h = max(int(round(new_h / base) * base), base)
     new_w = max(int(round(new_w / base) * base), base)
     if isinstance(opt.crop_size, list):
@@ -96,7 +96,7 @@ def get_transform(opt, params=None, grayscale=False, method=Image.BICUBIC, conve
         osize = [opt.load_size, opt.load_size]
         transform_list.append(transforms.Resize(osize, method))
     elif 'scale_width' in opt.preprocess:
-        base = 4 if 'unet' not in opt.netG else int(opt.netG.split('_')[-1])
+        base = 4 if 'unet' not in opt.netg else int(opt.netg.split('_')[-1])
         transform_list.append(transforms.Lambda(lambda img: __scale_width(img, opt.load_size, method, base)))
     if 'pad_zero' in opt.preprocess:
         transform_list.append(transforms.Lambda(lambda img: __pad_zero(img, opt.crop_size[1], method)))

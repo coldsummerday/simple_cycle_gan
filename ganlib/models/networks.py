@@ -1062,8 +1062,11 @@ class PixelDiscriminator(nn.Module):
 
 # Define ocr recognizer
 class OCR_recognizer(nn.Module):
-    def __init__(self, n_class):
+    def __init__(self, n_class,img_size:[]=[32,160]):
         super(OCR_recognizer, self).__init__()
+        self.h_down_scale = 32
+        self.w_down_scale = 4
+        self.max_len = int(img_size[0]/self.h_down_scale) * int(img_size[1]/self.w_down_scale)-1
         self.n_class = n_class
         self.vgg = nn.Sequential(
             nn.Conv2d(3, 64, (3, 3), (1,1), (1, 1)),
@@ -1108,16 +1111,17 @@ class OCR_recognizer(nn.Module):
         self.fc = nn.Linear(256, n_class)
     def forward(self, x):
         # x: [b, 3, h, w]
+
         embedding = self.vgg(x)
         embedding = embedding.squeeze(2)
         embedding = embedding.permute(0, 2, 1)  # [b, t, 512]
         features, _ = self.lstm(embedding)  # [b, t, 256]
         features = features.reshape(-1, 256)
         logits = self.fc(features)
-        logits = logits.reshape(-1, 159, self.n_class).permute(1, 0, 2) # [t, b, c]
+        logits = logits.reshape(-1, self.max_len, self.n_class).permute(1, 0, 2) # [t, b, c]
         # print('x:', x.size(), 'emb:', embedding.size(), 'lstm:', features.size(), 'logits:', logits.size())
         return logits
 
 
-def define_OCR(n_class, init_type, init_gain):
-    return init_net(OCR_recognizer(n_class), init_type, init_gain)
+def define_OCR(n_class,img_size,init_type, init_gain):
+    return init_net(OCR_recognizer(n_class,img_size), init_type, init_gain)
