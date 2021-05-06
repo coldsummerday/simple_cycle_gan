@@ -117,11 +117,13 @@ class LMDBShuffleDataset(BaseDataset):
         label_code = [self.charset.index(char)+1 for char in label]
         if len(label_code)<self.max_length:
             label_code.extend([0 for _ in range(self.max_length - len(label_code))])
+        if len(label_code)>self.max_length:
+            label_code = label_code[:self.max_length]
+
 
 
         label = torch.from_numpy(np.array(label_code))
         label_len = torch.from_numpy(np.array(len(label_code)))
-
         return im, label, label_len, width
 
     def __len__(self):

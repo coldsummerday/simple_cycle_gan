@@ -23,7 +23,7 @@ class CycleOCRCondModel(BaseModel):
                            'ctc_cS', 'ctc_cT']
         self.opt = opt
         self.is_train = opt.is_train
-
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         # define networks (both Generators and discriminators)
         # The naming is different from those used in the paper.
         # Code (vs. paper): G_A (G), G_B (F), D_A (D_Y), D_B (D_X)
@@ -37,6 +37,12 @@ class CycleOCRCondModel(BaseModel):
         self.netC_S = networks.define_OCR(opt.n_class,opt.crop_size ,opt.init_type, opt.init_gain)
         self.netC_T = networks.define_OCR(opt.n_class,opt.crop_size,opt.init_type, opt.init_gain)
 
+        if self.opt.pretrain_ctc_model is not None:
+            self.netC_S.load_state_dict(
+                torch.load(self.opt.pretrain_ctc_model, map_location=device))
+            self.netC_T.load_state_dict(
+                torch.load(self.opt.pretrain_ctc_model, map_location=device))
+
         if self.is_train:
             self.netD_S = networks.define_D(opt.output_nc, opt.ndf, opt.netd,
                                             opt.n_layers_d, opt.norm, opt.init_type, opt.init_gain)
@@ -46,7 +52,7 @@ class CycleOCRCondModel(BaseModel):
         #define_loss_func
         if self.is_train:
             # define loss functions
-            self.loss_func_GAN = networks.GANLoss(opt.gan_mode)  # define GAN loss.
+            self.loss_func_GAN = networks.GANLoss(opt.gan_mode).to(device)  # define GAN loss.
             self.loss_func_Cycle = torch.nn.L1Loss()
             self.loss_func_Idt = torch.nn.L1Loss()
             self.loss_func_CTC = torch.nn.CTCLoss(blank=0, reduction='none')
@@ -70,7 +76,6 @@ class CycleOCRCondModel(BaseModel):
     def set_input_dict(self,data_dict:dict)->dict:
         input_S = data_dict['S']
         input_T = data_dict['T']
-        data_dict["input_S"] = input_S
         data_dict["input_S"] = input_S
         data_dict["input_T"] = input_T
         data_dict["gt_S"] = data_dict["S"]
@@ -127,6 +132,7 @@ class CycleOCRCondModel(BaseModel):
             loss_idt_S = 0
 
         loss_G_S = self.loss_func_GAN(self.netD_S(fake_S),True)
+
         loss_G_T = self.loss_func_GAN(self.netD_T(fake_T),True)
         loss_cycle_S = self.loss_func_Cycle(rec_S,gt_S) * lambda_S
         loss_cycle_T = self.loss_func_Cycle(rec_T,gt_T) * lambda_T
@@ -179,6 +185,7 @@ class CycleOCRCondModel(BaseModel):
 
         T_input_len = torch.full((gt_T.shape[0],), self.ctc_train_len, dtype=torch.long)
 
+        ##TODO:这里应该做inf替换,不然backward全是nan
         loss_ctc_S = self.loss_func_CTC(self.netC_S(gt_S * S_mask).log_softmax(-1), S_labels,
                                             S_input_len, S_label_lens).mean()
         loss_ctc_T = self.loss_func_CTC(self.netC_T(gt_T * T_mask).log_softmax(-1), T_labels,
@@ -191,7 +198,6 @@ class CycleOCRCondModel(BaseModel):
                                              S_input_len, S_label_lens).mean()
         loss_ctc_cT = self.loss_func_CTC(self.netC_T(rec_T * T_mask).log_softmax(-1), T_labels,
                                              T_input_len, T_label_lens).mean()
-
         loss_ctc = (loss_ctc_S + loss_ctc_T + loss_ctc_fS + loss_ctc_fT +
                          loss_ctc_cS + loss_ctc_cT) / 1.
         return dict(
@@ -217,7 +223,6 @@ class CycleOCRCondModel(BaseModel):
 
         fake_T = self.fake_T_pool.query(fake_T)
         loss_D_T = self.backward_D_basic(self.netD_T, gt_T, fake_T)
-
         loss_D = (loss_D_S + loss_D_T) / 1.
         return dict(
             loss_D = loss_D,
@@ -262,10 +267,13 @@ class CycleOCRCondModel(BaseModel):
         total_loss_dict.update(loss_dict_G)
 
         loss_dict_ctc = self.calculate_losses_CTC(data_dict=data)
-        (loss_dict_G["loss_G"]+loss_dict_ctc["loss_ctc"]).backward()
+        # total_loss_dict.update(loss_dict_ctc)
+        if torch.isinf(loss_dict_ctc["loss_ctc"]) or torch.isnan(loss_dict_ctc["loss_ctc"]):
+            loss_dict_G["loss_G"].backward()
+        else:
+            (loss_dict_G["loss_G"]+loss_dict_ctc["loss_ctc"]).backward()
         clip_grad_norm_(itertools.chain(self.netG_T.parameters(), self.netG_S.parameters(), self.netC_S.parameters(),
                                         self.netC_T.parameters()), 20)
-
         self.optimizer_G.step()  # update G_A and G_B's weights
 
         # D_A and D_B

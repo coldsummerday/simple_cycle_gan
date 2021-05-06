@@ -167,7 +167,8 @@ def concat_labels(label_idx, label_len):
         cnt += int(label_len[i])
         real_label_idx = label_idx[i][:int(label_len[i])]
         targets.extend(real_label_idx)
-    targets = torch.from_numpy(np.array(targets))
+    # targets = torch.from_numpy(np.array(targets))
+    targets=torch.LongTensor(targets)
     return targets
 
 

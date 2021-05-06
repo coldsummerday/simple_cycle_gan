@@ -12,10 +12,14 @@ Crop_size = [32,160]
 Preprocess = 'scale_width_and_crop'
 
 UseLMDBDataset = True
-Charset = './data/chinese_charset.txt' #"the char~ set for  code  each char one line"
-Source_lmdb = './data/lmdbdataset/src_generate/'
+Charset = './data/chinese_charset.txt' #"the charset for  code  each char one line"
+# Source_lmdb = './data/lmdbdataset/src_generate/'
+Source_lmdb = [
+'./data/lmdbdataset/src_generate/',
+
+]
 Target_lmdb = './data/lmdbdataset/train_1w_zhb/'
-Test_lmdb = './data/lmdbdataset/val_1w_zhb'
+Test_lmdb = './data/lmdbdataset/val_1w_zhb/'
 
 Pad_h_ratio = '0.05,0.15' #'padding height ratio'
 Pad_w_ratio = '0.05,0.30' #'padding width ratio'

@@ -21,7 +21,7 @@ See frequently asked questions at: https://github.com/junyanz/pytorch-CycleGAN-a
 import logging
 import time
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader,ConcatDataset
 from torch.nn.parallel import DistributedDataParallel
 import sys
 import os
@@ -37,6 +37,7 @@ from ganlib.models.cycle_ocr_cond_model import CycleOCRCondModel
 from ganlib.models import create_model
 from ganlib.utils import Config,print_log,get_print_cfg_options,get_root_logger,load_checkpoint,save_checkpoint
 from ganlib.utils.dist_utils import init_dist
+from collections import OrderedDict
 
 def parse_args():
     parser = argparse.ArgumentParser(description='simple_cycle_gan train ')
@@ -79,6 +80,8 @@ def main():
 
 
     model = create_model(cfg)
+    if cfg.pretrain_ctc_model!=None:
+        pass
     if args.distributed and torch.cuda.is_available() and torch.cuda.device_count()>1:
         init_dist("pytorch",backend='nccl')
         model = DistributedDataParallel(
@@ -89,12 +92,12 @@ def main():
     else:
         model = model.to(device)
 
-
-    testset = LMDBShuffleDataset(cfg, cfg.test_lmdb, charset_str, charset_dict)
+    testset = build_lmdb_datasets(cfg,cfg.test_lmdb,charset_str,augment=0)
     testloader = DataLoader(testset, cfg.batch_size, shuffle=False, num_workers=cfg.num_threads)
-
-    Source_trainset = LMDBShuffleDataset(cfg, cfg.source_lmdb, charset_str, augment=0)
-    Target_trainset = LMDBShuffleDataset(cfg, cfg.target_lmdb, charset_str, augment=1)
+    Source_trainset = build_lmdb_datasets(cfg, cfg.source_lmdb, charset_str,augment=0)
+    Target_trainset = build_lmdb_datasets(cfg, cfg.target_lmdb, charset_str,augment=1)
+    # Source_trainset = LMDBShuffleDataset(cfg, cfg.source_lmdb, charset_str, augment=0)
+    # Target_trainset = LMDBShuffleDataset(cfg, cfg.target_lmdb, charset_str, augment=1)
     ConcateDataset = concat_dataset(Source_trainset, Target_trainset)
     dataset_size = len(ConcateDataset)  # get the number of images in the dataset.
     logger.info('The number of training images = %d' % dataset_size)
@@ -112,6 +115,8 @@ def main():
             start_num_iter = checkpoint["num_iter"]
         logger.info("model load checkpoint:{},start_epoch:{},start_iter:{}".format(cfg.resume,start_num_epoch,start_num_iter))
 
+
+
     total_iters = 0
     for epoch in range(start_num_epoch,cfg.total_epoch):
 
@@ -123,16 +128,24 @@ def main():
             #格式化数据
             data_dict = model.set_input_dict(data)
             data_dict = dict_data2model(model, data_dict)
-            netC_T, netC_S, netG_T, netG_S, netD_T, netD_S, loss_dict = model.forward(data_dict, return_loss=True)
-            print(loss_dict)
+            netC_T, netC_S, netG_T, netG_S, _, _, loss_dict = model.forward(data_dict, return_loss=True)
             if epoch_iter % cfg.log_freq ==0:
-                #TODO:logging
-                pass
+                print_loss(loss_dict,logger)
 
         if (epoch+1) % cfg.save_epoch_freq==0:
             save_checkpoint(model=model,filename=os.path.join(experiment_dir,"{}_full.pth".format(epoch)),num_epoch=epoch,num_iter=total_iters)
             torch.save(netG_T.state_dict(), os.path.join(experiment_dir,"{}_GT.pth".format(epoch)))
             torch.save(netG_S.state_dict(), os.path.join(experiment_dir,"{}_GS.pth".format(epoch)))
+
+
+
+def build_lmdb_datasets(cfg,paths:str,charset_str,augment=0):
+    if isinstance(paths,list):
+        datasets =  [LMDBShuffleDataset(cfg,path,charset_str,augment=augment) for path in paths]
+        final_dataset = ConcatDataset(datasets)
+    elif isinstance(paths,str):
+        final_dataset = LMDBShuffleDataset(cfg,paths,charset_str,augment=augment)
+    return final_dataset
 
 def open_charset_file(charset_path:str)->(str,dict):
     char_dict = {}
@@ -142,6 +155,23 @@ def open_charset_file(charset_path:str)->(str,dict):
         for index,line in enumerate(lines):
             char_dict[index]=line
         return "".join(lines),char_dict
+
+def print_loss(loss_dict:dict,logger):
+    ##收集各项loss,方便输出
+    log_str_list = []
+    for loss_name, loss_value in loss_dict.items():
+        if isinstance(loss_value, torch.Tensor):
+            loss_value = loss_value.mean().item()
+
+            log_str_list.append("{}:{:.4f}".format(loss_name,loss_value))
+        # elif isinstance(loss_value, list):
+        #     log_vars[loss_name] = sum(_loss.mean() for _loss in loss_value)
+        else:
+            raise TypeError(
+                '{} is not a tensor '.format(loss_name))
+
+    logger.info(",".join(log_str_list))
+
 
 if __name__ == '__main__':
     main()
