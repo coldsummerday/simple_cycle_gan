@@ -7,7 +7,7 @@
 Experiment_name = "experiment_name" ##'name of the experiment. It decides where to store samples and models'
 Checkpoints_dir = "./checkpoints" #models are saved here
 Model = "base" #help='chooses which model to use. [cycle_gan | pix2pix | test | colorization]')
-Batch_size = 8
+Batch_size = 32
 Input_nc = 3 #of input image channels: 3 for RGB and 1 for grayscale
 Output_nc = 3 #of output image channels: 3 for RGB and 1 for grayscale
 Crop_size = [32,640]
@@ -46,11 +46,13 @@ No_flip = 1 #'if specified, do not flip the images for dataset augmentation'
 Load_size =32
 
 #train setting
-Save_epoch_freq = 5 #'frequency of saving checkpoints at the end of epochs'
+
+Save_epoch_freq = 2 #'frequency of saving checkpoints at the end of epochs'
+Save_iter_freq = 10000
 Total_epoch = 20 #total train epoch
 
-Log_freq = 1000
-
+Log_freq = 3000
+Visual_freq = 3000
 
 Niter = 20 #'# of iter at starting learning rate'
 Niter_decay = 10 #'# of iter to linearly decay learning rate to zero'

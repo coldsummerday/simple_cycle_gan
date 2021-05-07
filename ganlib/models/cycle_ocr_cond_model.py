@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 from torch.nn.utils import clip_grad_norm_
@@ -5,7 +6,11 @@ import itertools
 from .simple_model_base import BaseModel
 from . import networks
 from ..utils import concat_labels
-from ganlib.utils.image_pool import ImagePool
+from ..utils.image_pool import ImagePool
+from ..utils.dist_utils import master_only
+from ..utils import save_checkpoint
+
+from ..visualization.tfboradbase import VisualBase
 class CycleOCRCondModel(BaseModel):
     """
        This class implements the CycleGAN model, for learning image-to-image translation without paired dataset.
@@ -21,6 +26,16 @@ class CycleOCRCondModel(BaseModel):
         super(CycleOCRCondModel, self).__init__()
         self.loss_names = ['D_S', 'D_T', 'G_S', 'G_T', 'cycle_S', 'cycle_T', 'ctc_S', 'ctc_T', 'ctc_fS', 'ctc_fT',
                            'ctc_cS', 'ctc_cT']
+
+        self.visual_loss_name_dict = {
+            "G":[ "loss_G","loss_G_S","loss_G_T","loss_cycle_T","loss_cycle_S","loss_idt_S","loss_idt_T"],
+            "D":["loss_D","loss_D_T","loss_D_S"],
+            "CTC":[ "loss_ctc","loss_ctc_S","loss_ctc_T","loss_ctc_fS","loss_ctc_fT"]
+        }
+        self.visual_tensor_name = ["input_S","input_S","fake_T","fake_S"]
+
+
+
         self.opt = opt
         self.is_train = opt.is_train
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -285,8 +300,20 @@ class CycleOCRCondModel(BaseModel):
         loss_dict_D["loss_D"].backward()
         clip_grad_norm_(itertools.chain(self.netD_S.parameters(), self.netD_T.parameters()), 20)
         self.optimizer_D.step()  # update D_A and D_B's weights
+        return data,total_loss_dict
+        # return self.netC_T, self.netC_S, self.netG_T, self.netG_S, self.netD_T, self.netD_S,total_loss_dict
 
-        return self.netC_T, self.netC_S, self.netG_T, self.netG_S, self.netD_T, self.netD_S,total_loss_dict
+    def register_scale_img_2_visual(self,visual_handler:VisualBase):
+        for key,value in self.visual_loss_name_dict.items():
+            visual_handler.register_scale(value,key)
+        visual_handler.register_imgs_name(self.visual_tensor_name)
+
+    @master_only
+    def save_checkpoints(self,save_paths:str,num_epoch:int,num_iter:int):
+        save_checkpoint(model=self, filename=os.path.join(save_paths, "{}_{}_full.pth".format(num_epoch,num_iter)), num_epoch=num_epoch,
+                    num_iter=num_iter)
+        torch.save(self.netG_T.state_dict(), os.path.join(save_paths, "{}_{}_GT.pth".format(num_epoch,num_iter)))
+        torch.save(self.netG_S.state_dict(), os.path.join(save_paths, "{}_{}_GS.pth".format(num_epoch,num_iter)))
 
 
 

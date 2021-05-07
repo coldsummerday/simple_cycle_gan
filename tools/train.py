@@ -38,6 +38,7 @@ from ganlib.models import create_model
 from ganlib.utils import Config,print_log,get_print_cfg_options,get_root_logger,load_checkpoint,save_checkpoint
 from ganlib.utils.dist_utils import init_dist
 from collections import OrderedDict
+from ganlib.visualization.tfboradbase import VisualBase
 
 def parse_args():
     parser = argparse.ArgumentParser(description='simple_cycle_gan train ')
@@ -61,7 +62,11 @@ def main():
     os.makedirs(cfg.checkpoints_dir,exist_ok=True)
     experiment_dir = os.path.join(cfg.checkpoints_dir,cfg.experiment_name)
     os.makedirs(experiment_dir,exist_ok=True)
+    visual_dir = os.path.join(experiment_dir,"visual_log")
+    os.makedirs(visual_dir,exist_ok=True)
     cfg.is_train = True
+
+    visual_tfboard_handler = VisualBase(visual_dir)
 
     # init the logger before other steps
     timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
@@ -80,6 +85,9 @@ def main():
 
 
     model = create_model(cfg)
+
+    model.register_scale_img_2_visual(visual_tfboard_handler)
+
     if cfg.pretrain_ctc_model!=None:
         pass
     if args.distributed and torch.cuda.is_available() and torch.cuda.device_count()>1:
@@ -118,6 +126,7 @@ def main():
 
 
     total_iters = 0
+    epoch_iters = len(trainloader)
     for epoch in range(start_num_epoch,cfg.total_epoch):
 
         epoch_iter = 0  # the number of training iterations in current epoch, reset to 0 every epoch
@@ -128,14 +137,32 @@ def main():
             #格式化数据
             data_dict = model.set_input_dict(data)
             data_dict = dict_data2model(model, data_dict)
-            netC_T, netC_S, netG_T, netG_S, _, _, loss_dict = model.forward(data_dict, return_loss=True)
+            data_dict, loss_dict = model.forward(data_dict, return_loss=True)
+
             if epoch_iter % cfg.log_freq ==0:
-                print_loss(loss_dict,logger)
+                loss_line=print_loss_line(loss_dict)
+                logger.info("epoch:{} {}/{} {}".format(epoch,epoch_iter,epoch_iters,loss_line))
+            if total_iters % cfg.visual_freq == 0:
+                visual_tfboard_handler.write_once(loss_dict,total_iters)
+                visual_tfboard_handler.write_once(data_dict,total_iters)
+
+            if total_iters % cfg.save_iter_freq ==0:
+                if hasattr(model, "module"):
+                    model.module.save_checkpoints(experiment_dir, epoch, total_iters)
+                else:
+                    model.save_checkpoints(experiment_dir, epoch, total_iters)
+
+
 
         if (epoch+1) % cfg.save_epoch_freq==0:
-            save_checkpoint(model=model,filename=os.path.join(experiment_dir,"{}_full.pth".format(epoch)),num_epoch=epoch,num_iter=total_iters)
-            torch.save(netG_T.state_dict(), os.path.join(experiment_dir,"{}_GT.pth".format(epoch)))
-            torch.save(netG_S.state_dict(), os.path.join(experiment_dir,"{}_GS.pth".format(epoch)))
+
+            if hasattr(model,"module"):
+                model.module.save_checkpoints(experiment_dir,epoch,total_iters)
+            else:
+                model.save_checkpoints(experiment_dir,epoch,total_iters)
+            # save_checkpoint(model=model,filename=os.path.join(experiment_dir,"{}_full.pth".format(epoch)),num_epoch=epoch,num_iter=total_iters)
+            # torch.save(netG_T.state_dict(), os.path.join(experiment_dir,"{}_GT.pth".format(epoch)))
+            # torch.save(netG_S.state_dict(), os.path.join(experiment_dir,"{}_GS.pth".format(epoch)))
 
 
 
@@ -149,14 +176,14 @@ def build_lmdb_datasets(cfg,paths:str,charset_str,augment=0):
 
 def open_charset_file(charset_path:str)->(str,dict):
     char_dict = {}
-    with open(charset_path,'r') as file_handler:
+    with open(charset_path,'r',encoding='utf-8') as file_handler:
         lines = file_handler.readlines()
         lines = [line.rstrip() for line in lines]
         for index,line in enumerate(lines):
             char_dict[index]=line
         return "".join(lines),char_dict
 
-def print_loss(loss_dict:dict,logger):
+def print_loss_line(loss_dict:dict)->str:
     ##收集各项loss,方便输出
     log_str_list = []
     for loss_name, loss_value in loss_dict.items():
@@ -169,8 +196,7 @@ def print_loss(loss_dict:dict,logger):
         else:
             raise TypeError(
                 '{} is not a tensor '.format(loss_name))
-
-    logger.info(",".join(log_str_list))
+    return ",".join(log_str_list)
 
 
 if __name__ == '__main__':

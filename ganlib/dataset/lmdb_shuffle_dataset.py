@@ -7,7 +7,7 @@ import torchvision.transforms as transforms
 from .data_augment import Transform
 import lmdb
 import six
-
+import re
 
 class LMDBShuffleDataset(BaseDataset):
     def __init__(self, opt, lmdb_data_path:str,charset:str,augment=0, shuffle=False):
@@ -31,6 +31,7 @@ class LMDBShuffleDataset(BaseDataset):
         self.lmdb_data_path = lmdb_data_path
 
         self.charset = charset
+        self.charset +=" "
         self.num_samples = 0
         with lmdb.open(lmdb_data_path, max_readers=32, readonly=True, lock=False, readahead=False, meminit=False).begin(write=False) as txn:
             self.num_samples = int(txn.get('num-samples'.encode()))
@@ -96,6 +97,7 @@ class LMDBShuffleDataset(BaseDataset):
                 label = 'error'
 
 
+
         # 数据增强
         if self.augment:
             img = cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2BGR)
@@ -114,7 +116,13 @@ class LMDBShuffleDataset(BaseDataset):
         im = transform(img)
 
         # 0 用来padding,解码的时候记得+1
-        label_code = [self.charset.index(char)+1 for char in label]
+        label_code = []
+        for char in label:
+            if char in self.charset:
+                label_code.append(self.charset.index(char)+1)
+            else:
+                label_code.append(0)
+        # label_code = [self.charset.index(char)+1 for char in label]
         if len(label_code)<self.max_length:
             label_code.extend([0 for _ in range(self.max_length - len(label_code))])
         if len(label_code)>self.max_length:
