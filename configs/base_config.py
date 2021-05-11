@@ -8,27 +8,24 @@ Experiment_name = "experiment_name" ##'name of the experiment. It decides where 
 Checkpoints_dir = "./checkpoints" #models are saved here
 Model = "base" #help='chooses which model to use. [cycle_gan | pix2pix | test | colorization]')
 Batch_size = 32
+
+
+
 Input_nc = 3 #of input image channels: 3 for RGB and 1 for grayscale
 Output_nc = 3 #of output image channels: 3 for RGB and 1 for grayscale
 Crop_size = [32,640]
 
 #net setting
-
-
-
 Ngf = 64 #of gen filters in the last conv layer
 Ndf = 64 #of discrim filters in the first conv layer
-
 """
 'specify discriminator architecture [basic | n_layers | pixel]. The basic model is a 70x70 PatchGAN. n_layers allows you to specify the layers in the discriminator'
 """
 netd = 'n_spect_layers'
-
 """
 specify generator architecture [resnet_9blocks | resnet_6blocks | unet_256 | unet_128 | unet_32]
 """
 netg = 'unet_32'
-
 #'only used if netD==n_layers'
 N_layers_D = 1
 Norm = 'instance' #'instance normalization or batch normalization [instance | batch | none]'
@@ -46,8 +43,7 @@ No_flip = 1 #'if specified, do not flip the images for dataset augmentation'
 Load_size =32
 
 #train setting
-
-Save_epoch_freq = 2 #'frequency of saving checkpoints at the end of epochs'
+Save_epoch_freq = 4 #'frequency of saving checkpoints at the end of epochs'
 Save_iter_freq = 10000
 Total_epoch = 20 #total train epoch
 

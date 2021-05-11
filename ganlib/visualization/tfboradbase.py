@@ -1,10 +1,20 @@
+import os.path
+
 from torch.utils.tensorboard import SummaryWriter
+import torch
+from ..utils.ori_utils import tensor2im,save_image
+
+
+def unnormalized_show(img:torch.tensor,std=0.5,mean=0.5):
+    img = img * std + mean     # unnormalize
+    return img
 
 
 class VisualBase(object):
-    def __init__(self,path:str):
+    def __init__(self,path:str,save_img_flag = False):
         self.tf_borad_writer = SummaryWriter(path)
-
+        self.save_img_flag = save_img_flag
+        self.save_path = path
         self.register_scale_names = []
         self.scale_group_name_dict = {}
         self.register_imgtensor_names = []
@@ -39,7 +49,12 @@ class VisualBase(object):
 
         for img_tensor_name in self.register_imgtensor_names:
             if img_tensor_name in data_dict.keys():
-                self.tf_borad_writer.add_images(img_tensor_name,data_dict[img_tensor_name],global_step=total_iter,dataformats="NCHW")
+                self.tf_borad_writer.add_images(img_tensor_name, unnormalized_show(data_dict[img_tensor_name]),global_step=total_iter,dataformats="NCHW")
+                if self.save_img_flag:
+                    img_name = os.path.join(self.save_path,"iter_{}_{}.jpg".format(total_iter,img_tensor_name))
+                    image_numpy = tensor2im(data_dict[img_tensor_name])
+                    save_image(image_numpy, img_name)
+
 
 
 

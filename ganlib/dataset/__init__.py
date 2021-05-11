@@ -15,6 +15,8 @@ import torch.utils.data
 from .base_dataset import BaseDataset
 
 
+from .dataset_builder import build_dataset
+
 def find_dataset_using_name(dataset_name):
     """Import the module "dataset/[dataset_name]_dataset.py".
 

@@ -1,4 +1,3 @@
-import os.path
 from .base_dataset import BaseDataset, get_transform, get_params
 from PIL import Image
 import torch, cv2
@@ -7,7 +6,6 @@ import torchvision.transforms as transforms
 from .data_augment import Transform
 import lmdb
 import six
-import re
 
 class LMDBShuffleDataset(BaseDataset):
     def __init__(self, opt, lmdb_data_path:str,charset:str,augment=0, shuffle=False):
@@ -91,9 +89,7 @@ class LMDBShuffleDataset(BaseDataset):
             except IOError:
                 print(f'Corrupted image for {index}')
                 # make dummy image and dummy label for corrupted image.
-
-                img = Image.new('RGB', (self.opt.default_h, self.opt.default_w))
-
+                img = Image.new('RGB', (self.opt.crop_size[0], self.opt.crop_size[1]))
                 label = 'error'
 
 
@@ -122,6 +118,9 @@ class LMDBShuffleDataset(BaseDataset):
                 label_code.append(self.charset.index(char)+1)
             else:
                 label_code.append(0)
+        true_len = len(label_code)
+        if true_len>self.max_length:
+            true_len = self.max_length
         # label_code = [self.charset.index(char)+1 for char in label]
         if len(label_code)<self.max_length:
             label_code.extend([0 for _ in range(self.max_length - len(label_code))])
@@ -131,7 +130,7 @@ class LMDBShuffleDataset(BaseDataset):
 
 
         label = torch.from_numpy(np.array(label_code))
-        label_len = torch.from_numpy(np.array(len(label_code)))
+        label_len = torch.from_numpy(np.array(true_len))
         return im, label, label_len, width
 
     def __len__(self):

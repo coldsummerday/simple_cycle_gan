@@ -24,15 +24,15 @@ class CycleOCRCondModel(BaseModel):
     """
     def __init__(self,opt):
         super(CycleOCRCondModel, self).__init__()
-        self.loss_names = ['D_S', 'D_T', 'G_S', 'G_T', 'cycle_S', 'cycle_T', 'ctc_S', 'ctc_T', 'ctc_fS', 'ctc_fT',
-                           'ctc_cS', 'ctc_cT']
+        # self.loss_names = ['D_S', 'D_T', 'G_S', 'G_T', 'cycle_S', 'cycle_T', 'ctc_S', 'ctc_T', 'ctc_fS', 'ctc_fT',
+        #                    'ctc_cS', 'ctc_cT']
 
         self.visual_loss_name_dict = {
             "G":[ "loss_G","loss_G_S","loss_G_T","loss_cycle_T","loss_cycle_S","loss_idt_S","loss_idt_T"],
             "D":["loss_D","loss_D_T","loss_D_S"],
             "CTC":[ "loss_ctc","loss_ctc_S","loss_ctc_T","loss_ctc_fS","loss_ctc_fT"]
         }
-        self.visual_tensor_name = ["input_S","input_S","fake_T","fake_S"]
+        self.visual_tensor_name = ["input_S","input_T","fake_T","fake_S"]
 
 
 
@@ -201,8 +201,10 @@ class CycleOCRCondModel(BaseModel):
         T_input_len = torch.full((gt_T.shape[0],), self.ctc_train_len, dtype=torch.long)
 
         ##TODO:这里应该做inf替换,不然backward全是nan
+
         loss_ctc_S = self.loss_func_CTC(self.netC_S(gt_S * S_mask).log_softmax(-1), S_labels,
                                             S_input_len, S_label_lens).mean()
+
         loss_ctc_T = self.loss_func_CTC(self.netC_T(gt_T * T_mask).log_softmax(-1), T_labels,
                                             T_input_len, T_label_lens).mean()
         loss_ctc_fS = self.loss_func_CTC(self.netC_S(fake_S * T_mask).log_softmax(-1), T_labels,
@@ -215,7 +217,7 @@ class CycleOCRCondModel(BaseModel):
                                              T_input_len, T_label_lens).mean()
         loss_ctc = (loss_ctc_S + loss_ctc_T + loss_ctc_fS + loss_ctc_fT +
                          loss_ctc_cS + loss_ctc_cT) / 1.
-        return dict(
+        final_ctc_loss_dict =  dict(
             loss_ctc=loss_ctc,
             loss_ctc_S=loss_ctc_S,
             loss_ctc_T=loss_ctc_T,
@@ -224,6 +226,7 @@ class CycleOCRCondModel(BaseModel):
             loss_ctc_cS=loss_ctc_cS,
             loss_ctc_cT = loss_ctc_cT
         )
+        return final_ctc_loss_dict
 
     def calculate_losses_D(self,data_dict:dict):
 
@@ -286,6 +289,7 @@ class CycleOCRCondModel(BaseModel):
         if torch.isinf(loss_dict_ctc["loss_ctc"]) or torch.isnan(loss_dict_ctc["loss_ctc"]):
             loss_dict_G["loss_G"].backward()
         else:
+            total_loss_dict.update(loss_dict_ctc)
             (loss_dict_G["loss_G"]+loss_dict_ctc["loss_ctc"]).backward()
         clip_grad_norm_(itertools.chain(self.netG_T.parameters(), self.netG_S.parameters(), self.netC_S.parameters(),
                                         self.netC_T.parameters()), 20)
